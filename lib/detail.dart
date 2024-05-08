@@ -4,170 +4,140 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 class DetailPage extends StatefulWidget {
-  final String categoryName;
+  final int mangaId;
 
-  DetailPage({required this.categoryName});
+  DetailPage({required this.mangaId});
 
   @override
   _DetailPageState createState() => _DetailPageState();
 }
 
 class _DetailPageState extends State<DetailPage> {
-  List meals = [];
+  Map<String, dynamic> mangaDetails = {};
 
   @override
   void initState() {
     super.initState();
-    fetchMeals();
+    fetchMangaDetails();
   }
 
-  Future<void> fetchMeals() async {
-    final response = await http.get(Uri.parse('https://www.themealdb.com/api/json/v1/1/filter.php?c=${widget.categoryName}'));
+  Future<void> fetchMangaDetails() async {
+    final response = await http.get(Uri.parse('https://api.jikan.moe/v4/manga/${widget.mangaId}/full'));
     if (response.statusCode == 200) {
       setState(() {
-        meals = json.decode(response.body)['meals'];
+        mangaDetails = json.decode(response.body)['data'];
       });
+    } else {
+      print('Failed to load manga details');
     }
   }
 
-  void fetchMealDetail(String mealId) async {
-    final response = await http.get(Uri.parse('https://www.themealdb.com/api/json/v1/1/lookup.php?i=$mealId'));
-    if (response.statusCode == 200) {
-      final mealDetail = json.decode(response.body)['meals'][0];
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => MealDetailPage(mealDetail: mealDetail),
-        ),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.pinkAccent[100],
-        title: Text('${widget.categoryName} Meals'),
-      ),
-      body: Container(
-        color: Color(0xFFFFF7F5),
-        child: meals.isEmpty
-            ? Center(child: CircularProgressIndicator())
-            : ListView.builder(
-          itemCount: meals.length,
-          itemBuilder: (context, index) {
-            final meal = meals[index];
-            return Card(
-              color: Colors.pink[50],
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5),
-              ),
-              margin: EdgeInsets.all(10),
-              elevation: 5,
-              child: ListTile(
-                contentPadding: EdgeInsets.all(10),
-                leading: Image.network(
-                  meal['strMealThumb'],
-                  width: 80,
-                  height: 80,
-                ),
-                title: Text(
-                  meal['strMeal'],
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                onTap: () => fetchMealDetail(meal['idMeal']),
-              ),
-            );
-          },
+  Widget buildTextSection(String label, String text) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: RichText(
+        text: TextSpan(
+          style: TextStyle(color: Colors.black, fontSize: 16),
+          children: [
+            TextSpan(text: "$label: ", style: TextStyle(fontWeight: FontWeight.bold)),
+            TextSpan(text: text),
+          ],
         ),
       ),
     );
   }
-}
 
-Future<void> launchURL(String url) async {
-  final Uri _url = Uri.parse(url);
-  if (!await launchUrl(_url)) {
-    throw "Couldn't launch URL";
+  Widget buildLinkSection(String label, List<dynamic> items) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("$label:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Column(
+            children: items.map<Widget>((item) => InkWell(
+              onTap: () => _launchURL(item['url']),
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 2),
+                child: Text(item['name'], style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline, fontSize: 16)),
+              ),
+            )).toList(),
+          ),
+        ],
+      ),
+    );
   }
-}
 
-class MealDetailPage extends StatelessWidget {
-  final Map<String, dynamic> mealDetail;
-
-  MealDetailPage({required this.mealDetail});
+  Future<void> _launchURL(String url) async {
+    if (!await canLaunchUrl(Uri.parse(url))) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Could not launch $url'),
+      ));
+    } else {
+      await launchUrl(Uri.parse(url));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.pinkAccent[100],
-        title: Text(mealDetail['strMeal']),
+        title: Text(mangaDetails.isNotEmpty ? mangaDetails['title'] : 'Loading...'),
       ),
-      body: Container(
-        color: Color(0xFFFFF7F5),
-        child: SingleChildScrollView(
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                SizedBox(height: 20),
-                Text(
-                  mealDetail['strMeal'],
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 24,
+      body: mangaDetails.isEmpty
+          ? Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+        child: Container(
+          color: Color(0xFFFFF7F5),
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(height: 20),
+              Text(mangaDetails['title'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24), textAlign: TextAlign.center),
+              SizedBox(height: 20),
+              Image.network(mangaDetails['images']['jpg']['large_image_url'], fit: BoxFit.contain, height: 200),
+              SizedBox(height: 20),
+              buildTextSection("Synopsis", mangaDetails['synopsis']),
+              buildTextSection("Background", mangaDetails['background']),
+              buildTextSection("Publishing Dates", mangaDetails['published']['string']),
+              buildTextSection("Score", mangaDetails['score'].toString()),
+              buildTextSection("Rank", mangaDetails['rank'].toString()),
+              buildTextSection("Popularity", mangaDetails['popularity'].toString()),
+              if (mangaDetails['authors'] != null)
+                buildLinkSection("Authors", mangaDetails['authors']),
+              if (mangaDetails['genres'] != null)
+                buildLinkSection("Genres", mangaDetails['genres']),
+              if (mangaDetails['themes'] != null)
+                buildLinkSection("Themes", mangaDetails['themes']),
+              if (mangaDetails['demographics'] != null)
+                buildLinkSection("Demographics", mangaDetails['demographics']),
+              if (mangaDetails['serializations'] != null)
+                buildLinkSection("Serialized In", mangaDetails['serializations']),
+              if (mangaDetails['relations'] != null)
+                buildLinkSection("Related Anime", mangaDetails['relations'][0]['entry']),
+              if (mangaDetails['external'] != null)
+                buildLinkSection("External Links", mangaDetails['external']),
+              if (mangaDetails['url'] != null)
+                Container(
+                  margin: EdgeInsets.symmetric(vertical: 10),
+                  child: ElevatedButton(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      child: Text('More Info', style: TextStyle(color: Colors.white, fontSize: 18)),
+                    ),
+                    onPressed: () => _launchURL(mangaDetails['url']),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.pinkAccent[100],
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)
+                      ),
+                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    ),
                   ),
-                ),
-                SizedBox(height: 10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8.0),
-                  child: Image.network(
-                    mealDetail['strMealThumb'],
-                    width: MediaQuery.of(context).size.width * 0.8,
-                  ),
-                ),
-                SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        "Category: ${mealDetail['strCategory']}",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                      ),
-                      Text(
-                        "Area: ${mealDetail['strArea']}",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                      ),
-                      SizedBox(height: 20),
-                      Text(
-                        "Instructions:",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        mealDetail['strInstructions'],
-                        style: TextStyle(fontSize: 16),
-                      ),
-                      if (mealDetail['strYoutube'] != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 20.0),
-                          child: InkWell(
-                            child: Text(
-                              'Watch on YouTube: ${mealDetail['strYoutube']}',
-                              style: TextStyle(color: Colors.blue, decoration: TextDecoration.underline),
-                            ),
-                            // Use the new global launchURL method here
-                            onTap: () => launchURL(mealDetail['strYoutube']),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                )
+            ],
           ),
         ),
       ),

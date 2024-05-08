@@ -10,27 +10,65 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List categories = [];
+  List recommendations = [];
+  int currentPage = 1;
+  bool hasMoreData = true;
 
   @override
   void initState() {
     super.initState();
-    fetchCategories();
+    fetchMangaRecommendations(currentPage);
   }
 
-  Future<void> fetchCategories() async {
-    final response = await http.get(Uri.parse('https://www.themealdb.com/api/json/v1/1/categories.php'));
+  Future<void> fetchMangaRecommendations(int page) async {
+    final response = await http.get(Uri.parse('https://api.jikan.moe/v4/manga/$page/recommendations'));
     if (response.statusCode == 200) {
+      var newData = json.decode(response.body)['data'];
       setState(() {
-        categories = json.decode(response.body)['categories'];
+        if (newData.isEmpty) {
+          hasMoreData = false;
+        } else {
+          recommendations = newData;
+          hasMoreData = true;
+        }
       });
     }
   }
 
-  void _openProfile() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => ProfilePage()),
+  void _nextPage() {
+    if (hasMoreData) {
+      setState(() {
+        currentPage++;
+        fetchMangaRecommendations(currentPage);
+      });
+    }
+  }
+
+  void _previousPage() {
+    if (currentPage > 1) {
+      setState(() {
+        currentPage--;
+        fetchMangaRecommendations(currentPage);
+      });
+    }
+  }
+
+  Widget _buildPaginationControls() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: <Widget>[
+        IconButton(
+          icon: Icon(Icons.arrow_back_ios),
+          onPressed: currentPage > 1 ? _previousPage : null,
+          color: currentPage > 1 ? Colors.pinkAccent[100] : Colors.grey,
+        ),
+        Text('Page $currentPage', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        IconButton(
+          icon: Icon(Icons.arrow_forward_ios),
+          onPressed: hasMoreData ? _nextPage : null,
+          color: hasMoreData ? Colors.pinkAccent[100] : Colors.grey,
+        ),
+      ],
     );
   }
 
@@ -39,58 +77,86 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.pinkAccent[100],
-        title: Text('Home'),
+        title: Text('Manga Recommendations'),
         actions: [
           IconButton(
             icon: Icon(Icons.account_circle),
-            onPressed: _openProfile,
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfilePage())),
           ),
         ],
       ),
       body: Container(
         color: Color(0xFFFFF7F5),
-        child: categories.isEmpty
-            ? Center(child: CircularProgressIndicator())
-            : ListView.builder(
-          itemCount: categories.length,
-          itemBuilder: (context, index) {
-            final category = categories[index];
-            return Card(
-              color: Colors.pink[50],
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5),
-              ),
-              margin: EdgeInsets.all(10),
-              elevation: 5,
-              child: ListTile(
-                contentPadding: EdgeInsets.all(10),
-                leading: Image.network(
-                  category['strCategoryThumb'],
-                  width: 80,
-                  height: 80,
+        padding: EdgeInsets.all(8),
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: recommendations.isEmpty
+                  ? Center(child: CircularProgressIndicator())
+                  : GridView.builder(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 4,
+                  childAspectRatio: 0.75,
+                  crossAxisSpacing: 8,
+                  mainAxisSpacing: 8,
                 ),
-                title: Text(
-                  category['strCategory'],
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  category['strCategoryDescription'],
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => DetailPage(
-                        categoryName: category['strCategory'],
+                itemCount: recommendations.length,
+                itemBuilder: (context, index) {
+                  final item = recommendations[index]['entry'];
+                  return Card(
+                    color: Colors.pink[50],
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => DetailPage(
+                              mangaId: item['mal_id'],
+                            ),
+                          ),
+                        );
+                      },
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.vertical(top: Radius.circular(5)),
+                              child: Image.network(
+                                item['images']['jpg']['image_url'],
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.all(8),
+                            child: Text(
+                              item['title'],
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.center,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.only(bottom: 8, left: 8, right: 8),
+                            child: Text(
+                              'Votes: ${recommendations[index]['votes']}',
+                              style: TextStyle(fontSize: 12),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   );
                 },
               ),
-            );
-          },
+            ),
+            _buildPaginationControls(),
+          ],
         ),
       ),
     );
