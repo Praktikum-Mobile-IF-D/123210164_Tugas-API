@@ -3,8 +3,6 @@
 123210164_Tugas-Api
 
 # Endpoint
-Categories : https://www.themealdb.com/api/json/v1/1/categories.php
+Recomendation : https://api.jikan.moe/v4/manga/$page/recommendations
 
-Meals : https://www.themealdb.com/api/json/v1/1/filter.php?c=Seafood
-
-Detail Meal : https://www.themealdb.com/api/json/v1/1/lookup.php?i=52772 
+Detail : https://api.jikan.moe/v4/manga/${widget.mangaId}/full
